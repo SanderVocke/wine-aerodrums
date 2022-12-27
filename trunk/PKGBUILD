@@ -3,19 +3,29 @@
 # Contributor: Eduardo Romero <eduardo@archlinux.org>
 # Contributor: Giovanni Scafora <giovanni@archlinux.org>
 
-pkgname=wine
+pkgname=wine-aerodrums
 pkgver=5.8
 pkgrel=1
 
 _pkgbasever=${pkgver/rc/-rc}
 
-source=(https://dl.winehq.org/wine/source/5.x/$pkgname-$_pkgbasever.tar.xz{,.sign}
+source=(https://dl.winehq.org/wine/source/5.x/wine-$_pkgbasever.tar.xz{,.sign}
+        https://github.com/SanderVocke/libusb-wine/archive/refs/tags/v0.0.2.tar.gz
         30-win32-aliases.conf
-        wine-binfmt.conf)
+        wine-4.6-msvcrt_add_sincos_to_importlib.patch
+        0002-makefiles-Only-apply-non-include-path-EXTRAINCL-flag.patch
+        80-pseye.rules
+        blacklist-gspca-ov534.conf
+        wine-aerodrums.install)
 sha512sums=('7b9df380655a72e8b9e95ca271a62308262d8efabbeb2ad459071afc9ed51518b42b1f75b019fe8d6b53cf5185e9cfc45ac1b8a7092f118fa2aff14f99c012de'
             'SKIP'
+            'e136e6e6c0aed86d899e335c6615a6cce9b3148a6bc70a4fa33084b6c442030b45fce1d6039f5ee879fd599ac36c3734f5f0db6104e4c4f3344bb174ad7c6af0'
             '6e54ece7ec7022b3c9d94ad64bdf1017338da16c618966e8baf398e6f18f80f7b0576edf1d1da47ed77b96d577e4cbb2bb0156b0b11c183a0accf22654b0a2bb'
-            'bdde7ae015d8a98ba55e84b86dc05aca1d4f8de85be7e4bd6187054bfe4ac83b5a20538945b63fb073caab78022141e9545685e4e3698c97ff173cf30859e285')
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP')
 validpgpkeys=(5AC1A08B03BD7A313E0A955AF5E6E9EEB9461DD7
               DA23579A74D4AD9AF9D3F945CEFAC8EAAF17519D)
 
@@ -100,11 +110,11 @@ optdepends=(
   samba           dosbox
 )
 makedepends=(${makedepends[@]} ${depends[@]})
-install=wine.install
 
 prepare() {
   # Allow ccache to work
-  mv $pkgname-$_pkgbasever $pkgname
+  rm -rf $pkgname
+  mv wine-$_pkgbasever $pkgname
 
   # Doesn't compile without remove these flags as of 4.10
   export CFLAGS="${CFLAGS/-fno-plt/}"
@@ -112,30 +122,37 @@ prepare() {
 
   sed 's|OpenCL/opencl.h|CL/opencl.h|g' -i $pkgname/configure*
 
+  # Patches
+  patch -d $pkgname -p1 -i ../wine-4.6-msvcrt_add_sincos_to_importlib.patch
+  patch -d $pkgname -p1 -i ../0002-makefiles-Only-apply-non-include-path-EXTRAINCL-flag.patch
+
   # Get rid of old build dirs
   rm -rf $pkgname-{32,64}-build
-  mkdir $pkgname-32-build
+  mkdir -p $pkgname-32-build
 }
 
 build() {
   cd "$srcdir"
 
+  #### WINE 64-bit ####
   msg2 "Building Wine-64..."
 
-  mkdir $pkgname-64-build
+  mkdir -p $pkgname-64-build
   cd "$srcdir/$pkgname-64-build"
   ../$pkgname/configure \
-    --prefix=/usr \
-    --libdir=/usr/lib \
+    --prefix=/opt/wine-aerodrums/usr \
+    --libdir=/opt/wine-aerodrums/usr/lib \
     --with-x \
     --with-gstreamer \
-    --enable-win64
+    --enable-win64 \
+    --without-ldap
   # Gstreamer was disabled for FS#33655
 
   make
 
+  ### WINE 32-bit ###
   _wine32opts=(
-    --libdir=/usr/lib32
+    --libdir=/opt/wine-aerodrums/usr/lib32
     --with-wine64="$srcdir/$pkgname-64-build"
   )
 
@@ -144,33 +161,102 @@ build() {
   msg2 "Building Wine-32..."
   cd "$srcdir/$pkgname-32-build"
   ../$pkgname/configure \
-    --prefix=/usr \
+    --prefix=/opt/wine-aerodrums/usr \
     --with-x \
     --with-gstreamer \
+    --without-ldap \
     "${_wine32opts[@]}"
 
   make
+
+  ### LIBUSB-WINE ###
+  # Note: this is normally quite pain-free but now we need to manually
+  # specify paths to tools and libs inside the unpackaged build dir of Wine.
+  msg2 "Building libusb-wine 64-bit..."
+  libusb_srcdir="$srcdir/libusb-wine-0.0.2/src"
+  libusb_outdir_64="$srcdir/libusb-wine-0.0.2-build-64"
+  mkdir -p "$libusb_outdir_64"
+  cd "$libusb_srcdir"
+  INC="$srcdir/wine-aerodrums/include"
+  WINEGCC="$srcdir/wine-aerodrums-64-build/tools/winegcc/winegcc"
+  WINEBUILD="$srcdir/wine-aerodrums-64-build/tools/winebuild/winebuild"
+  DLLS="$srcdir/wine-aerodrums-64-build/dlls"
+  LDFLAGS=""
+  for lib in kernel32 advapi32 user32 winecrt0 ntdll; do
+      LDFLAGS="$LDFLAGS -L$DLLS/$lib"
+  done
+
+  make clean
+  C_INCLUDE_PATH="$INC" \
+    make WINEGCC="$WINEGCC" WINEBUILD="$WINEBUILD" LDFLAGS="$LDFLAGS" -f Makefile.x64 \
+    libusb0.def libusb0.dll.so libusb0.dll.fake
+  cp libusb0.def libusb0.dll.so libusb0.dll.fake "$libusb_outdir_64"/ 
+  make -f Makefile.x64 clean
+
+  msg2 "Building libusb-wine 32-bit..."
+  libusb_outdir_32="$srcdir/libusb-wine-0.0.2-build-32"
+  mkdir -p "$libusb_outdir_32"
+  cd "$libusb_srcdir"
+  INC="$srcdir/wine-aerodrums/include"
+  LDFLAGS="-m32"
+  for lib in kernel32 advapi32 user32 winecrt0 ntdll; do
+      LDFLAGS="$LDFLAGS -L$DLLS/$lib"
+  done
+
+  make clean
+  C_INCLUDE_PATH="$INC" \
+    make WINEGCC="$WINEGCC" WINEBUILD="$WINEBUILD" LDFLAGS="$LDFLAGS" \
+    libusb0.def libusb0.dll.so libusb0.dll.fake
+  cp libusb0.def libusb0.dll.so libusb0.dll.fake "$libusb_outdir_32"/
 }
 
 package() {
+  libusb_outdir_32="$srcdir/libusb-wine-0.0.2-build-32"
+  libusb_outdir_64="$srcdir/libusb-wine-0.0.2-build-64"
+
   msg2 "Packaging Wine-32..."
   cd "$srcdir/$pkgname-32-build"
 
-  make prefix="$pkgdir/usr" \
-    libdir="$pkgdir/usr/lib32" \
-    dlldir="$pkgdir/usr/lib32/wine" install
+  make prefix="$pkgdir/opt/wine-aerodrums/usr" \
+    libdir="$pkgdir/opt/wine-aerodrums/usr/lib32" \
+    dlldir="$pkgdir/opt/wine-aerodrums/usr/lib32/wine" install
+  install -m644 "$libusb_outdir_32/libusb0.dll.so" "$pkgdir/opt/wine-aerodrums/usr/lib32/wine/libusb0.dll.so"
+  install -m644 "$libusb_outdir_32/libusb0.def" "$pkgdir/opt/wine-aerodrums/usr/lib32/wine/libusb0.def"
+  install -m644 "$libusb_outdir_32/libusb0.dll.fake" "$pkgdir/opt/wine-aerodrums/usr/lib32/wine/fakedlls/libusb0.dll"
 
   msg2 "Packaging Wine-64..."
   cd "$srcdir/$pkgname-64-build"
-  make prefix="$pkgdir/usr" \
-    libdir="$pkgdir/usr/lib" \
-    dlldir="$pkgdir/usr/lib/wine" install
+  make prefix="$pkgdir/opt/wine-aerodrums/usr" \
+    libdir="$pkgdir/opt/wine-aerodrums/usr/lib" \
+    dlldir="$pkgdir/opt/wine-aerodrums/usr/lib/wine" install
+  install -m644 "$libusb_outdir_64/libusb0.dll.so" "$pkgdir/opt/wine-aerodrums/usr/lib/wine/libusb0.dll.so"
+  install -m644 "$libusb_outdir_64/libusb0.def" "$pkgdir/opt/wine-aerodrums/usr/lib/wine/libusb0.def"
+  install -m644 "$libusb_outdir_64/libusb0.dll.fake" "$pkgdir/opt/wine-aerodrums/usr/lib/wine/fakedlls/libusb0.dll"
 
   # Font aliasing settings for Win32 applications
   install -d "$pkgdir"/etc/fonts/conf.{avail,d}
-  install -m644 "$srcdir/30-win32-aliases.conf" "$pkgdir/etc/fonts/conf.avail"
-  ln -s ../conf.avail/30-win32-aliases.conf "$pkgdir/etc/fonts/conf.d/30-win32-aliases.conf"
-  install -Dm 644 "$srcdir/wine-binfmt.conf" "$pkgdir/usr/lib/binfmt.d/wine.conf"
+  install -m644 "$srcdir/30-win32-aliases.conf" "$pkgdir/etc/fonts/conf.avail/30-win32-aerodrums-aliases.conf"
+  ln -s ../conf.avail/30-win32-aerodrums-aliases.conf "$pkgdir/etc/fonts/conf.d/30-win32-aerodrums-aliases.conf"
+
+  # Udev rule for aerodrums
+  install -d "$pkgdir/etc/udev/rules.d"
+  install -m644 "$srcdir/80-pseye.rules" "$pkgdir/etc/udev/rules.d/80-pseye.rules"
+  
+  # Blacklist Linux camera driver
+  # TODO: can be more elegant for the PSeye specifically?
+  install -d "$pkgdir/etc/modprobe.d"
+  install -m644 "$srcdir/blacklist-gspca-ov534.conf" "$pkgdir/etc/modprobe.d/blacklist-gspca-ov534.conf"
+
+  # Create symlinks for binaries
+  install -d "$pkgdir/usr/bin"
+  mkdir -p "$srcdir/links"
+  for executable in notepad regedit wine wine64 winecfg wineconsole winedbg winedump winefile winecpp winegcc wineg++ winepath wineserver wmc wrc; do
+    cat << EOF > "$srcdir/links/$executable-aerodrums"
+#!/bin/bash
+/opt/wine-aerodrums/usr/bin/$executable \$@
+EOF
+    install -m755 "$srcdir/links/$executable-aerodrums" "$pkgdir/usr/bin/$executable-aerodrums"
+  done
 }
 
 # vim:set ts=8 sts=2 sw=2 et:

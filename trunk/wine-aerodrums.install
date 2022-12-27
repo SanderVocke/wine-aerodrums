@@ -1,0 +1,4 @@
+post_install() {
+  echo "Blacklisted gspca_ov534. Now proceeding to unload the module."
+  modprobe -r gspca_ov534
+}
