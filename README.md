@@ -26,3 +26,7 @@ Configuring audio and/or MIDI output from Aerodrums is not in the scope of this 
 ## Background
 
 All credits go to Aerodrums forum user InTheWorks: [see here](https://aerodrums.com/forums/viewtopic.php?f=9&t=35188&sid=e7e6b6a268c9e09f340cb7ad9b6aef4f).
+
+## Roadmap
+
+I intend to create a .deb package for this as well. No other changes planned.
