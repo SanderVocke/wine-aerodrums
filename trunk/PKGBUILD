@@ -5,7 +5,7 @@
 
 pkgname=wine-aerodrums
 pkgver=5.8
-pkgrel=1
+pkgrel=2
 
 _pkgbasever=${pkgver/rc/-rc}
 
@@ -253,7 +253,7 @@ package() {
   for executable in notepad regedit wine wine64 winecfg wineconsole winedbg winedump winefile winecpp winegcc wineg++ winepath wineserver wmc wrc; do
     cat << EOF > "$srcdir/links/$executable-aerodrums"
 #!/bin/bash
-/opt/wine-aerodrums/usr/bin/$executable \$@
+/opt/wine-aerodrums/usr/bin/$executable "\$@"
 EOF
     install -m755 "$srcdir/links/$executable-aerodrums" "$pkgdir/usr/bin/$executable-aerodrums"
   done
