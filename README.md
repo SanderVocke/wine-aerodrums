@@ -10,6 +10,17 @@ Use at your own risk. Although this should cleanly install without touching any 
 
 Aerodrums needs functioning access to the PSEye USB camera. This can be achieved using [libusb-wine](https://github.com/stanson-ch/libusb-wine) on Wine 5. Later versions of Wine do not seem to support this anymore. This package will install Wine 5 into your `/opt` folder as `wine-aerodrums` with the needed modifications for USB access to the camera. Shortcuts such as `wine-aerodrums`, `winecfg-aerodrums` etc. are installed to use this Wine installation directly.
 
+## Troubleshooting
+
+### Camera not detected by Aerodrums
+
+There are two main causes known for this:
+
+* The `gspca_ov534` camera driver is loaded by Linux, barring access to the camera
+* The udev rule is not installed or working correctly (this would give an error somewhere along the lines of `Can't claim camera interface` or libusb errors about permissions)
+
+Double-check that you are using `wine-aerodrums` and not `wine`.
+
 ## Usage
 
 * Install the package.
