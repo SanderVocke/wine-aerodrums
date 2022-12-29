@@ -17,7 +17,7 @@ Aerodrums needs functioning access to the PSEye USB camera. This can be achieved
 * Plug in the PSEye camera.
 * Make a new wine prefix and install aerodrums inside it using `wine-aerodrums`: `WINEPREFIX=~/.my_aerodrums_wine_prefix wine-aerodrums path-to-aerodrums-installer.exe`
 * The installer should detect your camera without issues.
-* To run Aerodrums: `WINEPREFIX=~/.my_aerodrums_wine_prefix wine-aerodrums "~/.my_aerodrums_wine_prefix/drive_c/Program Files (x86)/Aerodrums/aerodrums.exe"
+* To run Aerodrums: `WINEPREFIX=~/.my_aerodrums_wine_prefix wine-aerodrums "~/.my_aerodrums_wine_prefix/drive_c/Program Files (x86)/Aerodrums/aerodrums.exe"`
 
 ## Audio / MIDI
 
